@@ -1,7 +1,9 @@
-import cv2
 import numpy as np
+import pygame
+from PIL import Image
 
 from LtoS.environments.grid_environments.env_Cleaner import maze
+from LtoS.mushroom_rl_extensions.utils.viewer import Viewer
 
 
 class EnvCleaner(object):
@@ -13,6 +15,8 @@ class EnvCleaner(object):
         self.agt_pos_list = []
         for i in range(self.N_agent):
             self.agt_pos_list.append([1, 1])
+        self.viewer = Viewer(self.map_size, self.map_size)
+        self.images = []
 
     def generate_maze(self, seed):
         symbols = {
@@ -77,16 +81,26 @@ class EnvCleaner(object):
             self.agt_pos_list.append([1, 1])
 
     def render(self):
-        obs = self.get_global_obs()
-        enlarge = 5
-        new_obs = np.ones((self.map_size * enlarge, self.map_size * enlarge, 3))
+        def x_y_to_display_x_y(x_orig, y_orig):
+            return np.array([y_orig + 0.5, self.map_size - 1 - x_orig + 0.5])
+
         for i in range(self.map_size):
             for j in range(self.map_size):
-                if obs[i][j][0] == 0.0 and obs[i][j][1] == 0.0 and obs[i][j][2] == 0.0:
-                    cv2.rectangle(new_obs, (i * enlarge, j * enlarge), (i * enlarge + enlarge, j * enlarge + enlarge), (0, 0, 0), -1)
-                if obs[i][j][0] == 1.0 and obs[i][j][1] == 0.0 and obs[i][j][2] == 0.0:
-                    cv2.rectangle(new_obs, (i * enlarge, j * enlarge), (i * enlarge + enlarge, j * enlarge + enlarge), (0, 0, 255), -1)
-                if obs[i][j][0] == 0.0 and obs[i][j][1] == 1.0 and obs[i][j][2] == 0.0:
-                    cv2.rectangle(new_obs, (i * enlarge, j * enlarge), (i * enlarge + enlarge, j * enlarge + enlarge), (0, 255, 0), -1)
-        cv2.imshow('image', new_obs)
-        cv2.waitKey(10)
+                if self.occupancy[i][j] == 0:  # clean
+                    self.viewer.square(x_y_to_display_x_y(i, j), 0, 0.7, (255, 255, 255))
+                if self.occupancy[i][j] == 1:  # wall
+                    self.viewer.square(x_y_to_display_x_y(i, j), 0, 0.7, (0, 0, 0))
+                if self.occupancy[i][j] == 2:  # dirty
+                    self.viewer.square(x_y_to_display_x_y(i, j), 0, 0.7, (0, 255, 0))
+                if [i, j] in self.agt_pos_list:  # agent
+                    self.viewer.square(x_y_to_display_x_y(i, j), 0, 0.7, (255, 0, 0))
+        rgb_array = pygame.surfarray.array3d(self.viewer.screen)
+        rgb_array = np.transpose(rgb_array, axes=(1, 0, 2))
+        img = Image.fromarray(rgb_array)
+        self.images.append(img)
+        self.viewer.display(.5)
+
+    def save_gif(self, filepath):
+        import imageio
+        imageio.mimsave(filepath, self.images[::1], loop=False, duration=400)
+        return self.images
